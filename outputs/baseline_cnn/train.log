@@ -1,0 +1,4 @@
+14:21:08 | INFO    | Run 'baseline_cnn' | device : cpu
+14:21:08 | INFO    | Train : 3018 images | Validation : 755 images
+14:21:08 | INFO    | Modele poster_cnn : 1 240 805 parametres entrainables
+14:21:08 | INFO    | Poids de classes : [0.5879999995231628, 2.8289999961853027, 0.6029999852180481, 0.5680000185966492, 0.41200000047683716]

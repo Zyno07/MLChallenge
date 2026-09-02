@@ -1,0 +1,76 @@
+14:18:55 | INFO    | Extraction des descripteurs (train)...
+14:19:02 | INFO    |   500 / 3018 images traitees
+14:19:09 | INFO    |   1000 / 3018 images traitees
+14:19:15 | INFO    |   1500 / 3018 images traitees
+14:19:22 | INFO    |   2000 / 3018 images traitees
+14:19:29 | INFO    |   2500 / 3018 images traitees
+14:19:35 | INFO    |   3000 / 3018 images traitees
+14:19:36 | INFO    | Extraction des descripteurs (validation)...
+14:19:42 | INFO    |   500 / 755 images traitees
+14:19:46 | INFO    | Descripteurs mis en cache dans outputs\baseline_features.npz
+14:19:46 | INFO    | Dimension du descripteur : 83
+14:19:46 | INFO    | Classe majoritaire (4) : accuracy = 0.3073, macro-F1 tres faible
+14:19:46 | INFO    | Entrainement de logreg ...
+14:19:46 | INFO    | logreg termine en 0.2 s
+14:19:46 | INFO    | === LOGREG ===
+Classe          Support  Precision   Rappel      F1
+---------------------------------------------------
+Animation           163      0.510    0.454   0.481
+Blockbuster          34      0.124    0.441   0.194
+Horreur             158      0.547    0.551   0.549
+Comedie             168      0.480    0.500   0.490
+Art & Essai         232      0.619    0.414   0.496
+---------------------------------------------------
+Accuracy                                      0.472
+Macro-F1                                      0.442
+
+Matrice de confusion (lignes = verite, colonnes = prediction)
+               0       1       2       3       4
+       0      74      25      14      33      17
+       1       4      15       9       2       4
+       2       5      30      87      15      21
+       3      35      20      12      84      17
+       4      27      31      37      41      96
+14:19:47 | INFO    | Entrainement de rf ...
+14:19:50 | INFO    | rf termine en 2.7 s
+14:19:50 | INFO    | === RF ===
+Classe          Support  Precision   Rappel      F1
+---------------------------------------------------
+Animation           163      0.523    0.411   0.460
+Blockbuster          34      0.800    0.118   0.205
+Horreur             158      0.516    0.627   0.566
+Comedie             168      0.527    0.464   0.494
+Art & Essai         232      0.507    0.616   0.556
+---------------------------------------------------
+Accuracy                                      0.518
+Macro-F1                                      0.456
+
+Matrice de confusion (lignes = verite, colonnes = prediction)
+               0       1       2       3       4
+       0      67       1      17      30      48
+       1       6       4       9       3      12
+       2       5       0      99      12      42
+       3      30       0      23      78      37
+       4      20       0      44      25     143
+14:19:50 | INFO    | Entrainement de svm ...
+14:19:54 | INFO    | svm termine en 3.9 s
+14:19:54 | INFO    | === SVM ===
+Classe          Support  Precision   Rappel      F1
+---------------------------------------------------
+Animation           163      0.500    0.472   0.486
+Blockbuster          34      0.241    0.412   0.304
+Horreur             158      0.538    0.576   0.557
+Comedie             168      0.490    0.446   0.467
+Art & Essai         232      0.552    0.526   0.539
+---------------------------------------------------
+Accuracy                                      0.502
+Macro-F1                                      0.471
+
+Matrice de confusion (lignes = verite, colonnes = prediction)
+               0       1       2       3       4
+       0      77      11      15      32      28
+       1       4      14       6       2       8
+       2      10      14      91      13      30
+       3      36       7      17      75      33
+       4      27      12      40      31     122
+14:19:55 | INFO    | Figures et probabilites ecrites dans outputs\baselines

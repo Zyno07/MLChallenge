@@ -1,0 +1,62 @@
+# ============================================================
+# Configuration par defaut du Challenge ML - Affiches de films
+# Toute experience = une copie de ce fichier avec des valeurs
+# modifiees. Ne modifiez JAMAIS ce fichier pour une experience,
+# creez configs/exp_xx.yaml a la place.
+# ============================================================
+
+# --- Nom de l'experience (sert de nom de dossier dans outputs/) ---
+run_name: baseline_cnn
+
+# --- Donnees ---
+data:
+  images_dir: data/images          # dossier contenant TOUTES les images d'entrainement
+  labels_csv: data/train_labels.csv # 2 colonnes, sans en-tete : nom_image,label
+  test_images_dir: data/test       # dossier des images de test (fourni le jour J)
+  test_list_csv: data/test_list.csv # liste ORDONNEE des noms d'images de test
+  val_ratio: 0.2                   # part de validation (split stratifie)
+  image_height: 240                # les affiches ont un ratio ~2:3
+  image_width: 160
+  num_workers: 4
+
+# --- Augmentation de donnees (train uniquement) ---
+augment:
+  horizontal_flip: 0.5             # proba de flip horizontal
+  rotation_degrees: 8              # rotation aleatoire +/- N degres
+  translate: 0.06                  # translation aleatoire (fraction de la taille)
+  scale_min: 0.85                  # zoom aleatoire min
+  scale_max: 1.10                  # zoom aleatoire max
+  brightness: 0.20
+  contrast: 0.20
+  saturation: 0.15                 # ATTENTION : la couleur est un signal fort ici
+  hue: 0.03                        # garder tres faible (horreur=sombre, animation=sature)
+  random_erasing: 0.25             # proba d'effacer un rectangle aleatoire
+
+# --- Modele ---
+model:
+  name: poster_cnn                 # poster_cnn | poster_cnn_small | poster_resnet
+  width: 32                        # nombre de filtres du premier bloc
+  num_blocks: 4                    # nombre de blocs conv (4 -> 32/64/128/256)
+  dropout: 0.4
+  num_classes: 5
+
+# --- Entrainement ---
+train:
+  epochs: 60
+  batch_size: 32
+  lr: 0.001
+  weight_decay: 0.0005
+  label_smoothing: 0.1
+  class_weighting: balanced        # none | balanced | sqrt_balanced
+  sampler: none                    # none | weighted  (alternative au class_weighting)
+  scheduler: cosine                # cosine | plateau | none
+  warmup_epochs: 3
+  early_stopping_patience: 15      # arret si le macro-F1 val ne progresse plus
+  mixup_alpha: 0.0                 # 0 = desactive ; 0.2 est un bon point de depart
+  grad_clip: 5.0
+  amp: true                        # mixed precision (accelere sur GPU, ignore sur CPU)
+
+# --- Divers ---
+seed: 42
+output_dir: outputs
+experiments_log: experiments.csv

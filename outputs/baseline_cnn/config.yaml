@@ -1,0 +1,44 @@
+run_name: baseline_cnn
+data:
+  images_dir: data/images
+  labels_csv: data/train_labels.csv
+  test_images_dir: data/test
+  test_list_csv: data/test_list.csv
+  val_ratio: 0.2
+  image_height: 240
+  image_width: 160
+  num_workers: 4
+augment:
+  horizontal_flip: 0.5
+  rotation_degrees: 8
+  translate: 0.06
+  scale_min: 0.85
+  scale_max: 1.1
+  brightness: 0.2
+  contrast: 0.2
+  saturation: 0.15
+  hue: 0.03
+  random_erasing: 0.25
+model:
+  name: poster_cnn
+  width: 32
+  num_blocks: 4
+  dropout: 0.4
+  num_classes: 5
+train:
+  epochs: 60
+  batch_size: 32
+  lr: 0.001
+  weight_decay: 0.0005
+  label_smoothing: 0.1
+  class_weighting: balanced
+  sampler: none
+  scheduler: cosine
+  warmup_epochs: 3
+  early_stopping_patience: 15
+  mixup_alpha: 0.0
+  grad_clip: 5.0
+  amp: true
+seed: 42
+output_dir: outputs
+experiments_log: experiments.csv
