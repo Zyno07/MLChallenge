@@ -1,0 +1,38 @@
+# ============================================================
+# Challenge ML 2026 - Classification d'affiches de films
+# Installation : pip install -r requirements.txt
+#
+# Sur Colab, torch/torchvision/numpy/pandas/sklearn/matplotlib
+# sont deja installes : le pip install ne fera que verifier.
+# ============================================================
+
+# --- Deep learning ---
+# Sur machine locale AVEC GPU NVIDIA, installez torch depuis
+# https://pytorch.org/get-started/locally/ AVANT ce fichier,
+# sinon vous obtiendrez la version CPU (20x plus lente).
+torch>=2.1.0
+torchvision>=0.16.0
+
+# --- Manipulation de donnees ---
+numpy>=1.24.0
+pandas>=2.0.0
+
+# --- Images ---
+Pillow>=10.0.0
+
+# --- Machine learning classique (src/baselines.py) ---
+# Fournit aussi train_test_split, utilise pour le split stratifie.
+scikit-learn>=1.3.0
+
+# --- Figures du rapport (matrice de confusion, courbes) ---
+matplotlib>=3.7.0
+
+# --- Lecture des fichiers de configuration ---
+PyYAML>=6.0
+
+# ============================================================
+# Optionnel : decommentez si vous en avez besoin
+# ============================================================
+# jupyter>=1.0.0          # notebooks en local
+# tqdm>=4.66.0            # barres de progression
+# seaborn>=0.13.0         # figures plus soignees pour le rapport
