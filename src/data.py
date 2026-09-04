@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold, train_test_split
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from torchvision import transforms
 
@@ -45,7 +45,7 @@ def read_test_list(csv_path: str | Path) -> List[str]:
 def stratified_split(
     df: pd.DataFrame, val_ratio: float, seed: int
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """Split stratifie : chaque classe garde la meme proportion en train et val."""
+    """Split stratifie simple : chaque classe garde la meme proportion."""
     train_df, val_df = train_test_split(
         df,
         test_size=val_ratio,
@@ -54,6 +54,41 @@ def stratified_split(
         shuffle=True,
     )
     return train_df.reset_index(drop=True), val_df.reset_index(drop=True)
+
+
+def kfold_split(
+    df: pd.DataFrame, n_folds: int, fold: int, seed: int
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Decoupage en k plis stratifies. Renvoie (train, validation) du pli demande.
+
+    La colonne `_row` conserve l'indice d'origine : indispensable pour
+    reassembler les predictions hors-pli (out-of-fold) dans le bon ordre.
+    """
+    if not 0 <= fold < n_folds:
+        raise ValueError(f"fold doit etre dans [0, {n_folds - 1}], recu {fold}")
+    df = df.copy()
+    df["_row"] = np.arange(len(df))
+    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
+    train_idx, val_idx = list(skf.split(df, df["label"]))[fold]
+    return (df.iloc[train_idx].reset_index(drop=True),
+            df.iloc[val_idx].reset_index(drop=True))
+
+
+def get_split(cfg: Config) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Point d'entree unique. Bascule automatiquement selon `data.fold`.
+
+    data.fold absent ou None  -> split unique 80/20 (mode historique)
+    data.fold = 0..k-1        -> validation croisee, pli demande
+
+    Toutes les parties du code passent par ici, ce qui garantit que
+    l'entrainement, l'evaluation et la prediction voient exactement le
+    meme decoupage.
+    """
+    df = read_labels(cfg.data.labels_csv)
+    fold = cfg.data.get("fold", None)
+    if fold is None:
+        return stratified_split(df, cfg.data.val_ratio, cfg.seed)
+    return kfold_split(df, cfg.data.get("n_folds", 5), int(fold), cfg.seed)
 
 
 # ------------------------------------------------------------------ dataset
@@ -173,8 +208,7 @@ def build_weighted_sampler(labels: Sequence[int]) -> WeightedRandomSampler:
 # --------------------------------------------------------------- dataloaders
 def build_dataloaders(cfg: Config, mean=DEFAULT_MEAN, std=DEFAULT_STD):
     """Renvoie (train_loader, val_loader, train_labels)."""
-    df = read_labels(cfg.data.labels_csv)
-    train_df, val_df = stratified_split(df, cfg.data.val_ratio, cfg.seed)
+    train_df, val_df = get_split(cfg)
 
     train_ds = PosterDataset(
         train_df["filename"], train_df["label"], cfg.data.images_dir,

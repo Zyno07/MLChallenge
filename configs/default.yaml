@@ -14,10 +14,13 @@ data:
   labels_csv: data/train_labels.csv # 2 colonnes, sans en-tete : nom_image,label
   test_images_dir: data/test       # dossier des images de test (fourni le jour J)
   test_list_csv: data/test_list.csv # liste ORDONNEE des noms d'images de test
-  val_ratio: 0.2                   # part de validation (split stratifie)
+  val_ratio: 0.2                   # part de validation (utilise si fold est null)
+  fold: null                       # null = split unique 80/20
+                                   # 0..n_folds-1 = validation croisee (via src.crossval)
+  n_folds: 5
   image_height: 240                # les affiches ont un ratio ~2:3
   image_width: 160
-  num_workers: 4
+  num_workers: 2   # <= nombre de coeurs CPU de la machine
 
 # --- Augmentation de donnees (train uniquement) ---
 augment:
