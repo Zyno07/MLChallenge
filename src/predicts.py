@@ -112,7 +112,14 @@ def main() -> None:
                         help="Teste toute la chaine sur le jeu de validation")
     parser.add_argument("--save-probs", default=None,
                         help="Chemin .npy pour sauvegarder les probabilites (ensemble)")
+    parser.add_argument("--class-weights", default=None,
+                        help="5 coefficients separes par des virgules, issus de "
+                             "src.calibrate (ex: 0.95,1.60,1.00,1.05,0.90)")
     args = parser.parse_args()
+
+    class_weights = None
+    if args.class_weights:
+        class_weights = np.array([float(v) for v in args.class_weights.split(",")])
 
     logger = setup_logging()
     device = get_device()
@@ -129,6 +136,9 @@ def main() -> None:
                                 cfg.data.images_dir, build_eval_transform(cfg))
         loader = torch.utils.data.DataLoader(dataset, batch_size=64, shuffle=False)
         probs = predict_probabilities(model, loader, device, args.tta)
+        if class_weights is not None:
+            logger.info("Poids de decision appliques : %s", class_weights.tolist())
+            probs = probs * class_weights
         preds = probs.argmax(1).tolist()
         logger.info(format_report(val_df["label"].tolist(), preds,
                                   cfg.model.num_classes))
@@ -149,6 +159,15 @@ def main() -> None:
                 len(names), cfg.data.test_images_dir)
 
     probs = predict_probabilities(model, loader, device, args.tta)
+    if args.save_probs:
+        # On sauvegarde les probabilites BRUTES, avant ponderation, pour que
+        # l'ensemble puisse recombiner proprement plusieurs modeles.
+        Path(args.save_probs).parent.mkdir(parents=True, exist_ok=True)
+        np.save(args.save_probs, probs)
+        logger.info("Probabilites brutes sauvegardees dans %s", args.save_probs)
+    if class_weights is not None:
+        logger.info("Poids de decision appliques : %s", class_weights.tolist())
+        probs = probs * class_weights
     preds = probs.argmax(1).tolist()
 
     write_submission(names, preds, args.output)
@@ -160,11 +179,6 @@ def main() -> None:
     if (distribution == 0).any():
         logger.warning("Classe(s) jamais predite(s) : %s",
                        np.where(distribution == 0)[0].tolist())
-
-    if args.save_probs:
-        Path(args.save_probs).parent.mkdir(parents=True, exist_ok=True)
-        np.save(args.save_probs, probs)
-        logger.info("Probabilites sauvegardees dans %s", args.save_probs)
 
     logger.info("Soumission ecrite : %s", args.output)
 
