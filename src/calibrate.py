@@ -35,7 +35,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from .data import PosterDataset, build_eval_transform, read_labels, stratified_split
+from .data import PosterDataset, build_eval_transform, get_split
 from .metrics import format_report, macro_f1
 from .predict import load_checkpoint, predict_probabilities
 from .utils import CLASS_NAMES, get_device, setup_logging
@@ -117,8 +117,7 @@ def main() -> None:
                 f"{score:.4f}" if score else "inconnu")
 
     # --- probabilites sur le MEME jeu de validation que l'entrainement
-    df = read_labels(cfg.data.labels_csv)
-    _, val_df = stratified_split(df, cfg.data.val_ratio, cfg.seed)
+    _, val_df = get_split(cfg)
     y = val_df["label"].to_numpy()
 
     if args.probs and Path(args.probs).exists():

@@ -23,8 +23,8 @@ from typing import List
 import numpy as np
 import torch
 
-from .data import (build_eval_transform, build_test_loader, read_labels,
-                   stratified_split, PosterDataset)
+from .data import (build_eval_transform, build_test_loader, get_split,
+                   PosterDataset)
 from .metrics import format_report
 from .models import build_model
 from .utils import Config, get_device, load_config, setup_logging
@@ -130,8 +130,7 @@ def main() -> None:
     # ---------------------------------------------------------- mode a blanc
     if args.dry_run:
         logger.info("MODE A BLANC : prediction sur le jeu de validation")
-        df = read_labels(cfg.data.labels_csv)
-        _, val_df = stratified_split(df, cfg.data.val_ratio, cfg.seed)
+        _, val_df = get_split(cfg)
         dataset = PosterDataset(val_df["filename"], val_df["label"],
                                 cfg.data.images_dir, build_eval_transform(cfg))
         loader = torch.utils.data.DataLoader(dataset, batch_size=64, shuffle=False)
