@@ -56,6 +56,18 @@ train:
   warmup_epochs: 3
   early_stopping_patience: 15      # arret si le macro-F1 val ne progresse plus
   mixup_alpha: 0.0                 # 0 = desactive ; 0.2 est un bon point de depart
+
+  # --- SWA (Stochastic Weight Averaging) ---
+  # Moyenne les poids des dernieres epoques au lieu d'en selectionner une seule.
+  # Repond directement a l'instabilite du macro-F1 en fin d'entrainement.
+  swa: false                       # true pour activer
+  swa_start_frac: 0.75             # fraction de l'entrainement avant de moyenner
+  swa_lr: null                     # null = garder le cosinus (moyennage de queue)
+                                   # ex: 0.0002 = taux constant pendant la phase SWA
+  swa: false                       # Stochastic Weight Averaging : moyenne les poids
+                                   # des dernieres epoques au lieu d'en choisir une.
+                                   # Plus stable quand le macro-F1 val oscille.
+  swa_start_frac: 0.75             # fraction de l'entrainement apres laquelle moyenner
   grad_clip: 5.0
   amp: true                        # mixed precision (accelere sur GPU, ignore sur CPU)
 
