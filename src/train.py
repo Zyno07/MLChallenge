@@ -18,6 +18,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from torch.optim.swa_utils import SWALR, AveragedModel, update_bn
+
 from .data import build_dataloaders, compute_class_weights
 from .metrics import (format_report, full_report, macro_f1, plot_confusion_matrix,
                       plot_history)
@@ -119,6 +121,54 @@ def evaluate(model, loader, criterion, device) -> Tuple[float, List[int], List[i
     return running_loss / max(seen, 1), all_true, all_pred
 
 
+# --------------------------------------------------------------------- SWA
+def finalize_swa(swa_model, train_loader, val_loader, eval_criterion, device,
+                 cfg, run_dir, best_f1, logger):
+    """Recalcule les statistiques de BatchNorm puis evalue le modele moyenne.
+
+    Le Stochastic Weight Averaging moyenne les POIDS des dernieres epoques au
+    lieu d'en selectionner une seule. Interet ici : le macro-F1 de validation
+    oscille fortement d'une epoque a l'autre (ecart-type ~0,017 mesure en
+    validation croisee), donc retenir le maximum d'une serie bruitee surestime
+    la performance reelle et donne un modele arbitraire. La moyenne des poids
+    est plus stable et generalise generalement mieux.
+
+    Etape indispensable : les statistiques courantes de BatchNorm ne sont pas
+    des parametres appris, elles ne peuvent donc pas etre moyennees. Il faut
+    les recalculer en parcourant le jeu d'entrainement une fois.
+    """
+    logger.info("SWA : recalcul des statistiques de BatchNorm...")
+    swa_model.to(device)
+    update_bn(train_loader, swa_model, device=device)
+
+    _, y_true, y_pred = evaluate(swa_model.module, val_loader, eval_criterion, device)
+    metrics = full_report(y_true, y_pred, cfg.model.num_classes)
+    swa_f1 = metrics["macro_f1"]
+
+    torch.save({
+        "model_state": swa_model.module.state_dict(),
+        "config": json.loads(json.dumps(cfg)),
+        "epoch": -1,
+        "val_macro_f1": swa_f1,
+    }, run_dir / "swa.pt")
+
+    logger.info("SWA  macro-F1 = %.4f   |   meilleure epoque = %.4f   (ecart %+.4f)",
+                swa_f1, best_f1, swa_f1 - best_f1)
+
+    if swa_f1 > best_f1:
+        torch.save({
+            "model_state": swa_model.module.state_dict(),
+            "config": json.loads(json.dumps(cfg)),
+            "epoch": -1,
+            "val_macro_f1": swa_f1,
+        }, run_dir / "best.pt")
+        logger.info("SWA meilleur : best.pt remplace par le modele moyenne.")
+    else:
+        logger.info("SWA moins bon : best.pt conserve (swa.pt reste disponible).")
+
+    return swa_f1, y_true, y_pred, metrics
+
+
 # ----------------------------------------------------- journal d'experiences
 def log_experiment(cfg: Config, metrics: Dict[str, float], extra: Dict) -> None:
     """Ajoute une ligne a experiments.csv : c'est la matiere de votre rapport."""
@@ -192,14 +242,38 @@ def main() -> None:
     scheduler = build_scheduler(optimizer, cfg, len(train_loader))
     scaler = torch.amp.GradScaler(enabled=cfg.train.amp and device.type == "cuda")
 
+    # SWA : on commence a moyenner apres swa_start_frac de l'entrainement,
+    # quand le taux d'apprentissage est deja bas et le modele dans un bassin stable.
+    use_swa = bool(cfg.train.get("swa", False))
+    swa_start = int(cfg.train.epochs * float(cfg.train.get("swa_start_frac", 0.75)))
+    swa_model = AveragedModel(model) if use_swa else None
+    swa_count = 0
+    # swa_lr non nul : on remplace le cosinus par un taux CONSTANT pendant la
+    # phase SWA. Les poids explorent alors un plateau de la surface de perte au
+    # lieu de converger vers un point unique, ce que la moyenne exploite.
+    # swa_lr nul : on garde le cosinus, la moyenne porte sur la queue de
+    # l'entrainement (variante plus conservatrice).
+    swa_lr = cfg.train.get("swa_lr", None)
+    swa_scheduler = None
+    if use_swa:
+        if swa_lr:
+            swa_scheduler = SWALR(optimizer, swa_lr=float(swa_lr), anneal_epochs=5)
+        logger.info("SWA active a partir de l'epoque %d (swa_lr = %s)",
+                    swa_start + 1, swa_lr if swa_lr else "cosinus conserve")
+
     history: Dict[str, list] = {"train_loss": [], "val_loss": [],
                                 "val_acc": [], "val_macro_f1": []}
     best_f1, best_epoch, patience = -1.0, 0, 0
     start = time.time()
 
     for epoch in range(1, cfg.train.epochs + 1):
+        # Pendant la phase SWA avec taux constant, le cosinus est desactive.
+        active_scheduler = scheduler
+        if use_swa and swa_scheduler is not None and epoch > swa_start:
+            active_scheduler = None
+
         train_loss = train_one_epoch(model, train_loader, criterion, optimizer,
-                                     scheduler, scaler, device, cfg)
+                                     active_scheduler, scaler, device, cfg)
         val_loss, y_true, y_pred = evaluate(model, val_loader, eval_criterion, device)
         metrics = full_report(y_true, y_pred, cfg.model.num_classes)
 
@@ -230,6 +304,15 @@ def main() -> None:
             metrics["macro_f1"], optimizer.param_groups[0]["lr"], flag,
         )
 
+        if use_swa and epoch > swa_start:
+            swa_model.update_parameters(model)
+            swa_count += 1
+            if swa_scheduler is not None:
+                swa_scheduler.step()
+
+        if use_swa and epoch >= swa_start:
+            patience = 0  # ne pas interrompre la phase de moyennage
+
         if patience >= cfg.train.early_stopping_patience:
             logger.info("Early stopping : aucun progres depuis %d epoques", patience)
             break
@@ -237,6 +320,18 @@ def main() -> None:
     duration = time.time() - start
     logger.info("Termine en %.1f min | meilleur macro-F1 = %.4f (epoque %d)",
                 duration / 60, best_f1, best_epoch)
+
+    # --- SWA : moyenne des poids, evaluee et comparee au meilleur checkpoint
+    swa_f1 = None
+    if use_swa:
+        if swa_count < 2:
+            logger.warning("SWA ignore : seulement %d epoques moyennees "
+                           "(arret anticipe trop precoce ?)", swa_count)
+        else:
+            logger.info("SWA : %d epoques moyennees", swa_count)
+            swa_f1, _, _, _ = finalize_swa(swa_model, train_loader, val_loader,
+                                           eval_criterion, device, cfg, run_dir,
+                                           best_f1, logger)
 
     # --- evaluation finale avec le MEILLEUR checkpoint, pas le dernier
     checkpoint = torch.load(run_dir / "best.pt", map_location=device,
@@ -253,6 +348,7 @@ def main() -> None:
         json.dump(history, f, indent=2)
 
     log_experiment(cfg, final, {
+        "swa_macro_f1": round(swa_f1, 4) if swa_f1 is not None else "",
         "best_epoch": best_epoch,
         "duration_min": round(duration / 60, 1),
         "n_params": count_parameters(model),
