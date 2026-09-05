@@ -137,6 +137,7 @@ def build_train_transform(cfg: Config, mean=DEFAULT_MEAN, std=DEFAULT_STD):
     a = cfg.augment
     return transforms.Compose([
         transforms.Resize((cfg.data.image_height, cfg.data.image_width)),
+        transforms.RandAugment(num_ops=2, magnitude=5),
         transforms.RandomHorizontalFlip(p=a.horizontal_flip),
         transforms.RandomAffine(
             degrees=a.rotation_degrees,
