@@ -59,21 +59,42 @@ def predict_probabilities(model, loader, device, tta: bool = False) -> np.ndarra
     return np.vstack(all_probs)
 
 
-def write_submission(names: List[str], labels: List[int], out_path: str | Path) -> None:
-    """Ecrit exactement 2 colonnes, virgule, SANS en-tete, dans l'ordre fourni."""
+# En-tete attendu par le leaderboard Kaggle du challenge.
+SUBMISSION_HEADER = ["Id", "Class"]
+
+
+def write_submission(names: List[str], labels: List[int], out_path: str | Path,
+                     header: List[str] | None = SUBMISSION_HEADER) -> None:
+    """Ecrit 2 colonnes separees par une virgule, dans l'ordre fourni.
+
+    header=["Id", "Class"] (defaut) ecrit la ligne d'en-tete demandee par
+    Kaggle. Passer header=None pour un fichier sans en-tete.
+    """
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f, delimiter=",", lineterminator="\n")
+        if header:
+            writer.writerow(header)
         for name, label in zip(names, labels):
             writer.writerow([name, int(label)])
 
 
-def validate_submission(path: str | Path, expected_names: List[str], logger) -> bool:
+def validate_submission(path: str | Path, expected_names: List[str], logger,
+                        header: List[str] | None = SUBMISSION_HEADER) -> bool:
     """Relit le fichier produit et verifie tout ce qui peut mal tourner."""
     ok = True
     with open(path, "r", encoding="utf-8") as f:
         rows = [line.rstrip("\n").split(",") for line in f if line.strip()]
+
+    if header:
+        if not rows or [c.strip() for c in rows[0]] != header:
+            logger.error("En-tete attendu %s, trouve %s",
+                         ",".join(header), ",".join(rows[0]) if rows else "(vide)")
+            ok = False
+        else:
+            logger.info("En-tete conforme : %s", ",".join(header))
+        rows = rows[1:]  # on valide les donnees, pas l'en-tete
 
     if len(rows) != len(expected_names):
         logger.error("Nombre de lignes : %d attendu, %d ecrit", len(expected_names),
@@ -112,11 +133,14 @@ def main() -> None:
                         help="Teste toute la chaine sur le jeu de validation")
     parser.add_argument("--save-probs", default=None,
                         help="Chemin .npy pour sauvegarder les probabilites (ensemble)")
+    parser.add_argument("--no-header", action="store_true",
+                        help="Ecrit le CSV sans la ligne d'en-tete Id,Class")
     parser.add_argument("--class-weights", default=None,
                         help="5 coefficients separes par des virgules, issus de "
                              "src.calibrate (ex: 0.95,1.60,1.00,1.05,0.90)")
     args = parser.parse_args()
 
+    header = None if args.no_header else SUBMISSION_HEADER
     class_weights = None
     if args.class_weights:
         class_weights = np.array([float(v) for v in args.class_weights.split(",")])
@@ -142,8 +166,8 @@ def main() -> None:
         logger.info(format_report(val_df["label"].tolist(), preds,
                                   cfg.model.num_classes))
         names = val_df["filename"].tolist()
-        write_submission(names, preds, args.output)
-        validate_submission(args.output, names, logger)
+        write_submission(names, preds, args.output, header)
+        validate_submission(args.output, names, logger, header)
         logger.info("Chaine complete verifiee. Fichier test : %s", args.output)
         return
 
@@ -169,8 +193,8 @@ def main() -> None:
         probs = probs * class_weights
     preds = probs.argmax(1).tolist()
 
-    write_submission(names, preds, args.output)
-    if not validate_submission(args.output, names, logger):
+    write_submission(names, preds, args.output, header)
+    if not validate_submission(args.output, names, logger, header):
         raise SystemExit("Le fichier de soumission est invalide, ne le rendez pas.")
 
     distribution = np.bincount(preds, minlength=5)
