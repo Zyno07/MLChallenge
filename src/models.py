@@ -152,6 +152,54 @@ class PosterResNet(nn.Module):
         return self.head(self.pool(self.features(self.stem(x))))
 
 
+class PosterResNetV2(nn.Module):
+    """ResNet maison a sous-echantillonnage reduit.
+
+    MOTIVATION
+    ----------
+    PosterResNet divise la resolution par 32 avant le classifieur : stride 2
+    dans le stem, MaxPool, puis trois blocs de stride 2. Sur une affiche de
+    288 pixels de haut, il ne reste que 9 pixels, contre 18 pour PosterCNN.
+    Le detail de texture qui distingue un rendu dessine d'une photographie est
+    perdu, ce qui explique son macro-F1 hors-pli de 0,628 contre 0,674.
+
+    Cette variante retire le MaxPool du stem : facteur 16 au lieu de 32, soit
+    la meme resolution finale que PosterCNN, tout en conservant les connexions
+    residuelles. L'objectif est un membre d'ensemble a la fois PERFORMANT et
+    DECORRELE des CNN simples, la decorrelation etant ce qui fait la valeur
+    d'une agregation.
+
+    PosterResNet est conserve intact : ses checkpoints restent chargeables.
+    """
+
+    def __init__(self, num_classes: int = 5, width: int = 48,
+                 num_blocks: int = 4, dropout: float = 0.3) -> None:
+        super().__init__()
+        # Facteur 2 seulement (pas de MaxPool), contre 4 pour PosterResNet.
+        self.stem = nn.Sequential(
+            nn.Conv2d(3, width, 5, stride=2, padding=2, bias=False),
+            nn.BatchNorm2d(width),
+            nn.ReLU(inplace=True),
+        )
+        blocks: list[nn.Module] = []
+        in_ch = width
+        for i in range(num_blocks):
+            out_ch = width * (2 ** i)
+            stride = 1 if i == 0 else 2
+            blocks.append(ResidualBlock(in_ch, out_ch, stride=stride))
+            blocks.append(ResidualBlock(out_ch, out_ch))
+            in_ch = out_ch
+        self.features = nn.Sequential(*blocks)
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.head = nn.Sequential(
+            nn.Flatten(), nn.Dropout(dropout), nn.Linear(in_ch, num_classes)
+        )
+        self.apply(init_weights)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.head(self.pool(self.features(self.stem(x))))
+
+
 # ------------------------------------------------------------ initialisation
 def init_weights(module: nn.Module) -> None:
     """Initialisation Kaiming : adaptee aux activations ReLU."""
@@ -172,6 +220,7 @@ MODELS = {
     "poster_cnn": PosterCNN,
     "poster_cnn_small": PosterCNNSmall,
     "poster_resnet": PosterResNet,
+    "poster_resnet_v2": PosterResNetV2,
 }
 
 
